@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Response, status
 from pydantic import BaseModel
-from app.db_connect import connect
+from app.database import connect
 from app.send_email import send_email_otp
-from app.common import user_type_to_str
+from app.common import user_type_to_str, is_email_valid, conv_to_dict
 
 import random
 from time import time
@@ -16,9 +16,126 @@ router = APIRouter(
     tags=["users"]
 )
 
+class user(BaseModel):
+    email: str
+    user_type: int = 0
+
+# create one
+@router.post("/")
+def create_user(data: user, response: Response):
+    cur = conn.cursor()
+    try:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        valid = is_email_valid(data.email) and user_type_to_str(data.user_type) != None
+        if valid:
+            cur.execute(f"INSERT INTO user_account (email,user_type) VALUES ('{data.email}','{data.user_type}')")
+            resp_dict = data
+            response.status_code = status.HTTP_201_CREATED
+        else:
+            resp_dict = {"message" : "Invalid data"}
+            response.status_code = status.HTTP_400_BAD_REQUEST
+    except:
+        resp_dict = {"message" : "Given email may already exist"}
+        response.status_code = status.HTTP_400_BAD_REQUEST
+    finally:
+        cur.close()
+        conn.commit()
+        return resp_dict
+
+# retrieve one/all
+@router.get("/{email}")
+def get_users(email: str, response: Response):
+    cur = conn.cursor()
+    try:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        col_names = ['email', 'user_type']
+        if email != 'all':
+            cur.execute(f"SELECT email, user_type FROM user_account WHERE user_account.email = '{email}'")
+        else:
+            cur.execute("SELECT email, user_type FROM user_account ORDER BY email ASC")
+        users = conv_to_dict("user_accounts", cur.fetchall(), col_names)
+        if len(users) > 0:
+            resp_dict = users
+            response.status_code = status.HTTP_200_OK
+        else:
+            resp_dict = {}
+            response.status_code = status.HTTP_404_NOT_FOUND
+    except:
+        resp_dict = {}
+        response.status_code = status.HTTP_400_BAD_REQUEST
+    finally:
+        cur.close()
+        return resp_dict
+
+# update one
+@router.post("/{email}")
+def update_user(data: user, email: str, response: Response):
+    cur = conn.cursor()
+    try:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        cur.execute(f"SELECT email FROM user_account WHERE user_account.email = '{email}'")
+        matches = cur.fetchall()
+        if len(matches) == 1:
+            valid = is_email_valid(data.email) and user_type_to_str(data.user_type) != None
+            if valid:
+                cur.execute(f"DELETE FROM user_account WHERE email = '{email}'")
+                cur.execute(f"INSERT INTO user_account (email, user_type) VALUES ('{data.email}', '{data.user_type}')")
+                resp_dict = data
+                response.status_code = status.HTTP_200_OK
+            else:
+                resp_dict = {"message" : "Given email may already exist"}
+                response.status_code = status.HTTP_400_BAD_REQUEST
+        else:
+            resp_dict = {"message" : "Given roll number was not found!"}
+            response.status_code = status.HTTP_404_NOT_FOUND
+    except:
+        resp_dict = {}
+        response.status_code = status.HTTP_400_BAD_REQUEST
+    finally:
+        cur.close()
+        conn.commit()
+        return resp_dict
+
+
+# delete one/all
+@router.delete("/{email}")
+def delete_user(email: str, response: Response):
+    cur = conn.cursor()
+    try:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        col_names = ['email', 'user_type']
+        if email != 'all':
+            valid = is_email_valid(email)
+            if valid:
+                cur.execute(f"SELECT email, user_type FROM user_account WHERE email = '{email}'")
+                row = conv_to_dict("users", cur.fetchall(), col_names)
+                if len(row) > 0:
+                    cur.execute(f"DELETE FROM user_account WHERE email = '{email}'")
+                    resp_dict = row
+                    response.status_code = status.HTTP_200_OK
+                else:
+                    resp_dict = {}
+                    response.status_code = status.HTTP_404_NOT_FOUND
+            else:
+                resp_dict = {}
+                response.status_code = status.HTTP_400_BAD_REQUEST
+        else:
+            cur.execute("SELECT email, user_type FROM user_account")
+            rows = conv_to_dict("user_accounts", cur.fetchall(), col_names)
+            cur.execute("DELETE FROM user_account")
+            resp_dict = rows
+            response.status_code = status.HTTP_200_OK
+    except:
+        resp_dict = {}
+        response.status_code = status.HTTP_400_BAD_REQUEST
+    finally:
+        cur.close()
+        conn.commit()
+        return resp_dict
+
 class loginObj(BaseModel):
     email: str
-    otp: int | None = None
+    otp: int
 
 @router.post("/genotp")
 def genotp(data: loginObj, response: Response):

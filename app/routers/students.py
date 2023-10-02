@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Response, status
 from pydantic import BaseModel
-from app.db_connect import connect
+from app.database import connect
 from app.common import conv_to_dict
 from typing import List
 
@@ -11,8 +11,8 @@ router = APIRouter(
 )
 
 class student(BaseModel):
-    roll_num: str | None = None
-    name: str | None = None
+    roll_num: str
+    name: str
 
 # create one
 @router.post("/")
@@ -20,7 +20,7 @@ def add_student(data: student, response: Response):
     cur = conn.cursor()
     try:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-        valid = data.roll_num != None and len(data.roll_num) == 9 and data.name != None
+        valid = len(data.roll_num) == 9
         if valid:
             cur.execute(f"INSERT INTO student (roll_num, name) VALUES ('{data.roll_num}', '{data.name}')")
             resp_dict = data
@@ -42,11 +42,13 @@ def get_students(roll_num: str, response: Response):
     cur = conn.cursor()
     try:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        cur.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'student'")
+        col_names = cur.fetchone()
         if roll_num != 'all':
             cur.execute(f"SELECT * FROM student WHERE student.roll_num = '{roll_num}'")
         else:
             cur.execute("SELECT * FROM student ORDER BY roll_num ASC")
-        students = conv_to_dict("students", cur.fetchall(), ["roll_num", "name"])
+        students = conv_to_dict("students", cur.fetchall(), col_names)
         if len(students) > 0:
             resp_dict = students
             response.status_code = status.HTTP_200_OK
@@ -69,7 +71,7 @@ def update_student(data: student, roll_num: str, response: Response):
         cur.execute(f"SELECT * FROM student WHERE student.roll_num = '{roll_num}'")
         matches = cur.fetchall()
         if len(matches) == 1:
-            valid = data.roll_num != None and len(data.roll_num) == 9 and data.name != None
+            valid = len(data.roll_num) == 9
             if valid:
                 cur.execute(f"DELETE FROM student WHERE roll_num = '{roll_num}'")
                 cur.execute(f"INSERT INTO student (roll_num, name) VALUES ('{data.roll_num}', '{data.name}')")
@@ -91,18 +93,19 @@ def update_student(data: student, roll_num: str, response: Response):
 
 
 # delete one/all
-@router.delete("/")
-def delete_student(data: student, response: Response):
+@router.delete("/{roll_num}")
+def delete_student(roll_num: str, response: Response):
     cur = conn.cursor()
     try:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-        if data.roll_num != None:
-            if len(data.roll_num) == 9:
-                cur.execute(f"SELECT roll_num, name FROM student WHERE roll_num = '{data.roll_num}'")
-                row = conv_to_dict("students", cur.fetchall(), ["roll_num", "name"])
-                print(len(row))
+        col_names = ['roll_num', 'name']
+        if roll_num != 'all':
+            valid = len(roll_num) == 9
+            if valid:
+                cur.execute(f"SELECT roll_num, name FROM student WHERE roll_num = '{roll_num}'")
+                row = conv_to_dict("students", cur.fetchall(), col_names)
                 if len(row) > 0:
-                    cur.execute(f"DELETE FROM student WHERE roll_num = '{data.roll_num}'")
+                    cur.execute(f"DELETE FROM student WHERE roll_num = '{roll_num}'")
                     resp_dict = row
                     response.status_code = status.HTTP_200_OK
                 else:
@@ -112,8 +115,8 @@ def delete_student(data: student, response: Response):
                 resp_dict = {}
                 response.status_code = status.HTTP_400_BAD_REQUEST
         else:
-            cur.execute("SELECT * FROM student")
-            rows = conv_to_dict("students", cur.fetchall(), ["roll_num", "name"])
+            cur.execute("SELECT roll_num, name FROM student")
+            rows = conv_to_dict("students", cur.fetchall(), col_names)
             cur.execute("DELETE FROM student")
             resp_dict = rows
             response.status_code = status.HTTP_200_OK

@@ -1,3 +1,6 @@
+import re
+email_regex = re.compile(r"([-!#-'*+/-9=?A-Z^-~]+(\.[-!#-'*+/-9=?A-Z^-~]+)*|\"([]!#-[^-~ \t]|(\\[\t -~]))+\")@([-!#-'*+/-9=?A-Z^-~]+(\.[-!#-'*+/-9=?A-Z^-~]+)*|\[[\t -Z^-~]*])")
+
 def conv_to_dict(key, data, columns):
     if len(data) == 0:
         return []
@@ -17,3 +20,11 @@ def user_type_to_str(user_type):
         return "parent"
     elif user_type == 10:
         return "admin"
+    else:
+        return None
+
+def is_email_valid(email):
+    if re.fullmatch(email_regex, email):
+        return True
+    else:
+        return False 
