@@ -21,7 +21,7 @@ class user(BaseModel):
     user_type: int = 0
 
 # create one
-@router.post("/")
+@router.post("/create")
 def create_user(data: user, response: Response):
     cur = conn.cursor()
     try:
@@ -43,7 +43,7 @@ def create_user(data: user, response: Response):
         return resp_dict
 
 # retrieve one/all
-@router.get("/{email}")
+@router.get("/get/{email}")
 def get_users(email: str, response: Response):
     cur = conn.cursor()
     try:
@@ -58,7 +58,7 @@ def get_users(email: str, response: Response):
             resp_dict = users
             response.status_code = status.HTTP_200_OK
         else:
-            resp_dict = {}
+            resp_dict = {"message" : "Email not found"}
             response.status_code = status.HTTP_404_NOT_FOUND
     except:
         resp_dict = {}
@@ -68,7 +68,7 @@ def get_users(email: str, response: Response):
         return resp_dict
 
 # update one
-@router.post("/{email}")
+@router.post("/update/{email}")
 def update_user(data: user, email: str, response: Response):
     cur = conn.cursor()
     try:
@@ -86,7 +86,7 @@ def update_user(data: user, email: str, response: Response):
                 resp_dict = {"message" : "Given email may already exist"}
                 response.status_code = status.HTTP_400_BAD_REQUEST
         else:
-            resp_dict = {"message" : "Given roll number was not found!"}
+            resp_dict = {"message" : "Given email was not found!"}
             response.status_code = status.HTTP_404_NOT_FOUND
     except:
         resp_dict = {}
@@ -98,7 +98,7 @@ def update_user(data: user, email: str, response: Response):
 
 
 # delete one/all
-@router.delete("/{email}")
+@router.delete("/delete/{email}")
 def delete_user(email: str, response: Response):
     cur = conn.cursor()
     try:
@@ -151,7 +151,7 @@ def genotp(data: loginObj, response: Response):
             response.status_code = status.HTTP_200_OK
             resp_dict = {"message" : f"OTP sent to {data.email}!"}
         else:
-            response.status_code = status.HTTP_400_BAD_REQUEST
+            response.status_code = status.HTTP_404_NOT_FOUND
             resp_dict = {"message" : "Given email is not registered :("}
     except:
         response.status_code = status.HTTP_400_BAD_REQUEST

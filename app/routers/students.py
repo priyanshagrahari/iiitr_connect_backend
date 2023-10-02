@@ -52,7 +52,7 @@ def get_students(roll_num: str, response: Response):
             resp_dict = students
             response.status_code = status.HTTP_200_OK
         else:
-            resp_dict = {}
+            resp_dict = {"message" : "Roll number not found"}
             response.status_code = status.HTTP_404_NOT_FOUND
     except:
         resp_dict = {}
