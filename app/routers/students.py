@@ -42,12 +42,11 @@ def get_students(roll_num: str, response: Response):
     cur = conn.cursor()
     try:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-        cur.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'student'")
-        col_names = cur.fetchone()
+        col_names = ['roll_num', 'name']
         if roll_num != 'all':
-            cur.execute(f"SELECT * FROM student WHERE student.roll_num = '{roll_num}'")
+            cur.execute(f"SELECT roll_num, name FROM student WHERE roll_num = '{roll_num}'")
         else:
-            cur.execute("SELECT * FROM student ORDER BY roll_num ASC")
+            cur.execute("SELECT roll_num, name FROM student ORDER BY roll_num ASC")
         students = conv_to_dict("students", cur.fetchall(), col_names)
         if len(students) > 0:
             resp_dict = students

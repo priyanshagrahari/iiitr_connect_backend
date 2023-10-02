@@ -3,7 +3,7 @@ email_regex = re.compile(r"([-!#-'*+/-9=?A-Z^-~]+(\.[-!#-'*+/-9=?A-Z^-~]+)*|\"([
 
 def conv_to_dict(key, data, columns):
     if len(data) == 0:
-        return []
+        return {}
     if len(data[0]) != len(columns):
         raise Exception('number of columns mismatched')
     data_dict_list = []
