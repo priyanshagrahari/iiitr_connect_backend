@@ -1,0 +1,5 @@
+uvicorn[standard]
+fastapi
+pydantic
+python-dotenv
+psycopg2
