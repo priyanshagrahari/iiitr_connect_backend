@@ -2,4 +2,4 @@ uvicorn[standard]
 fastapi
 pydantic
 python-dotenv
-psycopg2
+psycopg2-binary~=2.9.6
