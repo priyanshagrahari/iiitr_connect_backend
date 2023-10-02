@@ -227,9 +227,10 @@ class verifyObj(BaseModel):
 @router.post("/verify")
 def verify(data: verifyObj, response: Response):
     try:
+        resp_dict = {"message" : "Temporary server error :/"}
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        cur = conn.cursor()
         if _verify(data.token):
-            cur = conn.cursor()
             cur.execute(f"SELECT email, user_type FROM user_account WHERE token = '{data.token}'")
             row = cur.fetchall()
             email = row[0][0]
@@ -246,4 +247,5 @@ def verify(data: verifyObj, response: Response):
             resp_dict = {"message" : "Token invalid, please login again"}
             response.status_code = status.HTTP_401_UNAUTHORIZED
     finally:
+        cur.close()
         return resp_dict
