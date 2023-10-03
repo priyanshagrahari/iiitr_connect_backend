@@ -17,6 +17,7 @@ class student(BaseModel):
 # create one
 @router.post("/")
 def add_student(data: student, response: Response):
+    conn = connect()
     cur = conn.cursor()
     try:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -34,11 +35,13 @@ def add_student(data: student, response: Response):
     finally:
         cur.close()
         conn.commit()
+        conn.close()
         return resp_dict
 
 # retrieve one/all
 @router.get("/{roll_num}")
 def get_students(roll_num: str, response: Response):
+    conn = connect()
     cur = conn.cursor()
     try:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -59,11 +62,13 @@ def get_students(roll_num: str, response: Response):
         response.status_code = status.HTTP_400_BAD_REQUEST
     finally:
         cur.close()
+        conn.close()
         return resp_dict
 
 # update one
 @router.post("/{roll_num}")
 def update_student(data: student, roll_num: str, response: Response):
+    conn = connect()
     cur = conn.cursor()
     try:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -88,12 +93,14 @@ def update_student(data: student, roll_num: str, response: Response):
     finally:
         cur.close()
         conn.commit()
+        conn.close()
         return resp_dict
 
 
 # delete one/all
 @router.delete("/{roll_num}")
 def delete_student(roll_num: str, response: Response):
+    conn = connect()
     cur = conn.cursor()
     try:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -125,4 +132,5 @@ def delete_student(roll_num: str, response: Response):
     finally:
         cur.close()
         conn.commit()
+        conn.close()
         return resp_dict

@@ -10,7 +10,6 @@ import uuid
 from datetime import datetime, timezone
 
 token_validity = 15 # generated tokens valid for days
-conn = connect()
 router = APIRouter(
     prefix="/users",
     tags=["users"]
@@ -23,6 +22,7 @@ class user(BaseModel):
 # create one
 @router.post("/create")
 def create_user(data: user, response: Response):
+    conn = connect()
     cur = conn.cursor()
     try:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -40,11 +40,13 @@ def create_user(data: user, response: Response):
     finally:
         cur.close()
         conn.commit()
+        conn.close()
         return resp_dict
 
 # retrieve one/all
 @router.get("/get/{email}")
 def get_users(email: str, response: Response):
+    conn = connect()
     cur = conn.cursor()
     try:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -65,11 +67,13 @@ def get_users(email: str, response: Response):
         response.status_code = status.HTTP_400_BAD_REQUEST
     finally:
         cur.close()
+        conn.close()
         return resp_dict
 
 # update one
 @router.post("/update/{email}")
 def update_user(data: user, email: str, response: Response):
+    conn = connect()
     cur = conn.cursor()
     try:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -94,12 +98,14 @@ def update_user(data: user, email: str, response: Response):
     finally:
         cur.close()
         conn.commit()
+        conn.close()
         return resp_dict
 
 
 # delete one/all
 @router.delete("/delete/{email}")
 def delete_user(email: str, response: Response):
+    conn = connect()
     cur = conn.cursor()
     try:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -131,6 +137,7 @@ def delete_user(email: str, response: Response):
     finally:
         cur.close()
         conn.commit()
+        conn.close()
         return resp_dict
 
 class loginObj(BaseModel):
@@ -139,6 +146,7 @@ class loginObj(BaseModel):
 
 @router.post("/genotp")
 def genotp(data: loginObj, response: Response):
+    conn = connect()
     cur = conn.cursor()
     try:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -159,10 +167,12 @@ def genotp(data: loginObj, response: Response):
     finally:
         cur.close()
         conn.commit()
+        conn.close()
         return resp_dict
 
 @router.post("/login")
 def login(data: loginObj, response: Response):
+    conn = connect()
     cur = conn.cursor()
     try:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -198,54 +208,59 @@ def login(data: loginObj, response: Response):
     finally:
         cur.close()
         conn.commit()
+        conn.close()
         return resp_dict
 
 def _verify(token):
+    conn = connect()
     cur = conn.cursor()
-    #try:
-    verified = False
-    cur.execute(f"SELECT token_gen_time FROM user_account WHERE token = '{token}'")
-    row = cur.fetchall()
-    if len(row) > 0:
-        timestp = row[0][0]
-        if (timestp - datetime.now(timezone.utc)).days < token_validity:
-            verified = True
-        else:
-            cur.execute(f"""
-                        UPDATE user_account 
-                        SET token = NULL, token_gen_time = NULL 
-                        WHERE token = '{token}'
-                        """)
-    #finally:
-    cur.close()
-    conn.commit()
-    return verified
+    try:
+        verified = False
+        cur.execute(f"SELECT token_gen_time FROM user_account WHERE token = '{token}'")
+        row = cur.fetchall()
+        if len(row) > 0:
+            timestp = row[0][0]
+            if (timestp - datetime.now(timezone.utc)).days < token_validity:
+                verified = True
+            else:
+                cur.execute(f"""
+                            UPDATE user_account 
+                            SET token = NULL, token_gen_time = NULL 
+                            WHERE token = '{token}'
+                            """)
+    finally:
+        cur.close()
+        conn.commit()
+        conn.close()
+        return verified
 
 class verifyObj(BaseModel):
     token: str
 
 @router.post("/verify")
 def verify(data: verifyObj, response: Response):
-    #try:
-    resp_dict = {"message" : "Temporary server error :/"}
-    response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-    cur = conn.cursor()
-    if _verify(data.token):
-        cur.execute(f"SELECT email, user_type FROM user_account WHERE token = '{data.token}'")
-        row = cur.fetchall()
-        email = row[0][0]
-        user_type = row[0][1]
-        resp_dict = { 
-            "email" : email,
-            "user_type" : user_type, 
-            "user_str" : user_type_to_str(user_type), 
-            "token" : data.token,
-            "message" : "Login successful!" 
-        }
-        response.status_code = status.HTTP_200_OK
-    else:
-        resp_dict = {"message" : "Token invalid, please login again"}
-        response.status_code = status.HTTP_401_UNAUTHORIZED
-    #finally:
-    cur.close()
-    return resp_dict
+    try:
+        resp_dict = {"message" : "Temporary server error :/"}
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        conn = connect()
+        cur = conn.cursor()
+        if _verify(data.token):
+            cur.execute(f"SELECT email, user_type FROM user_account WHERE token = '{data.token}'")
+            row = cur.fetchall()
+            email = row[0][0]
+            user_type = row[0][1]
+            resp_dict = { 
+                "email" : email,
+                "user_type" : user_type, 
+                "user_str" : user_type_to_str(user_type), 
+                "token" : data.token,
+                "message" : "Login successful!" 
+            }
+            response.status_code = status.HTTP_200_OK
+        else:
+            resp_dict = {"message" : "Token invalid, please login again"}
+            response.status_code = status.HTTP_401_UNAUTHORIZED
+    finally:
+        cur.close()
+        conn.close()
+        return resp_dict
