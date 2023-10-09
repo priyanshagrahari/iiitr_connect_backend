@@ -1,12 +1,15 @@
-from fastapi import APIRouter, Response, status
+from typing import Annotated, Union
+import cv2
+from fastapi import APIRouter, Header, Response, UploadFile, status
+import numpy
 from pydantic import BaseModel
 from app.database import connect
 from app.send_email import send_email_otp
-from app.common import user_type_to_str, is_email_valid, conv_to_dict
+from app.common import user_type_to_str, is_email_valid, conv_to_dict, USER_TYPE
 
 import random
-from time import time
 import uuid
+from time import time
 from datetime import datetime, timezone
 
 token_validity = 15 # generated tokens valid for days
@@ -21,14 +24,24 @@ class user(BaseModel):
 
 # create one
 @router.post("/create")
-def create_user(data: user, response: Response):
+def create_user(
+    data: user, 
+    response: Response,
+    token: Annotated[Union[str, None], Header()] = None
+):
+    if (token is None or _verify_token(token) != USER_TYPE.ADMIN):
+        response.status_code = status.HTTP_401_UNAUTHORIZED
+        resp_dict = {"message" : "Invalid token, please login again"}
+        return resp_dict
     conn = connect()
     cur = conn.cursor()
     try:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
         valid = is_email_valid(data.email) and user_type_to_str(data.user_type) != None
         if valid:
-            cur.execute(f"INSERT INTO user_account (email,user_type) VALUES ('{data.email}','{data.user_type}')")
+            cur.execute("INSERT INTO user_accounts (email,user_type) VALUES (%s, %s)", 
+                        (data.email, data.user_type))
+            conn.commit()
             resp_dict = data
             response.status_code = status.HTTP_201_CREATED
         else:
@@ -39,22 +52,30 @@ def create_user(data: user, response: Response):
         response.status_code = status.HTTP_400_BAD_REQUEST
     finally:
         cur.close()
-        conn.commit()
         conn.close()
         return resp_dict
 
 # retrieve one/all
 @router.get("/get/{email}")
-def get_users(email: str, response: Response):
+def get_users(
+    email: str, 
+    response: Response,
+    token: Annotated[Union[str, None], Header()] = None
+):
+    if (token is None or _verify_token(token) != USER_TYPE.ADMIN):
+        response.status_code = status.HTTP_401_UNAUTHORIZED
+        resp_dict = {"message" : "Invalid token, please login again"}
+        return resp_dict
     conn = connect()
     cur = conn.cursor()
     try:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
         col_names = ['email', 'user_type']
         if email != 'all':
-            cur.execute(f"SELECT email, user_type FROM user_account WHERE user_account.email = '{email}'")
+            cur.execute("SELECT email, user_type FROM user_accounts WHERE email = %s", 
+                        (email, ))
         else:
-            cur.execute("SELECT email, user_type FROM user_account ORDER BY email ASC")
+            cur.execute("SELECT email, user_type FROM user_accounts ORDER BY email ASC")
         users = conv_to_dict("user_accounts", cur.fetchall(), col_names)
         if len(users) > 0:
             resp_dict = users
@@ -72,22 +93,33 @@ def get_users(email: str, response: Response):
 
 # update one
 @router.post("/update/{email}")
-def update_user(data: user, email: str, response: Response):
+def update_user(
+    data: user, 
+    email: str, 
+    response: Response,
+    token: Annotated[Union[str, None], Header()] = None
+):
+    if (token is None or _verify_token(token) != USER_TYPE.ADMIN):
+        response.status_code = status.HTTP_401_UNAUTHORIZED
+        resp_dict = {"message" : "Invalid token, please login again"}
+        return resp_dict
     conn = connect()
     cur = conn.cursor()
     try:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-        cur.execute(f"SELECT email FROM user_account WHERE user_account.email = '{email}'")
+        cur.execute("SELECT email FROM user_accounts WHERE email = %s", 
+                    (email, ))
         matches = cur.fetchall()
-        if len(matches) == 1:
+        if len(matches) > 0:
             valid = is_email_valid(data.email) and user_type_to_str(data.user_type) != None
             if valid:
-                cur.execute(f"DELETE FROM user_account WHERE email = '{email}'")
-                cur.execute(f"INSERT INTO user_account (email, user_type) VALUES ('{data.email}', '{data.user_type}')")
+                cur.execute("UPDATE user_accounts SET email = %s, user_type = %s WHERE email = %s",
+                            (data.email, data.user_type, email))
+                conn.commit()
                 resp_dict = data
                 response.status_code = status.HTTP_200_OK
             else:
-                resp_dict = {"message" : "Given email may already exist"}
+                resp_dict = {"message" : "Given email is invalid"}
                 response.status_code = status.HTTP_400_BAD_REQUEST
         else:
             resp_dict = {"message" : "Given email was not found!"}
@@ -97,14 +129,21 @@ def update_user(data: user, email: str, response: Response):
         response.status_code = status.HTTP_400_BAD_REQUEST
     finally:
         cur.close()
-        conn.commit()
         conn.close()
         return resp_dict
 
 
 # delete one/all
 @router.delete("/delete/{email}")
-def delete_user(email: str, response: Response):
+def delete_user(
+    email: str, 
+    response: Response,
+    token: Annotated[Union[str, None], Header()] = None
+):
+    if (token is None or _verify_token(token) != USER_TYPE.ADMIN):
+        response.status_code = status.HTTP_401_UNAUTHORIZED
+        resp_dict = {"message" : "Invalid token, please login again"}
+        return resp_dict
     conn = connect()
     cur = conn.cursor()
     try:
@@ -113,10 +152,12 @@ def delete_user(email: str, response: Response):
         if email != 'all':
             valid = is_email_valid(email)
             if valid:
-                cur.execute(f"SELECT email, user_type FROM user_account WHERE email = '{email}'")
+                cur.execute("SELECT email, user_type FROM user_accounts WHERE email = %s",
+                            (email, ))
                 row = conv_to_dict("users", cur.fetchall(), col_names)
                 if len(row) > 0:
-                    cur.execute(f"DELETE FROM user_account WHERE email = '{email}'")
+                    cur.execute("DELETE FROM user_accounts WHERE email = %s", 
+                                (email, ))
                     resp_dict = row
                     response.status_code = status.HTTP_200_OK
                 else:
@@ -126,17 +167,17 @@ def delete_user(email: str, response: Response):
                 resp_dict = {}
                 response.status_code = status.HTTP_400_BAD_REQUEST
         else:
-            cur.execute("SELECT email, user_type FROM user_account")
+            cur.execute("SELECT email, user_type FROM user_accounts")
             rows = conv_to_dict("user_accounts", cur.fetchall(), col_names)
-            cur.execute("DELETE FROM user_account")
+            cur.execute("DELETE FROM user_accounts")
             resp_dict = rows
             response.status_code = status.HTTP_200_OK
+        conn.commit()
     except:
         resp_dict = {}
         response.status_code = status.HTTP_400_BAD_REQUEST
     finally:
         cur.close()
-        conn.commit()
         conn.close()
         return resp_dict
 
@@ -150,12 +191,15 @@ def genotp(data: loginObj, response: Response):
     cur = conn.cursor()
     try:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-        cur.execute(f"SELECT * FROM user_account WHERE email = '{data.email}'")
+        cur.execute("SELECT * FROM user_accounts WHERE email = %s",
+                    (data.email, ))
         if len(cur.fetchall()) > 0:
             random.seed(time())
             otp = random.randint(111111, 999999)
-            cur.execute(f"UPDATE user_account SET otp = {otp} WHERE email = '{data.email}'")
+            cur.execute("UPDATE user_accounts SET otp = %s WHERE email = %s",
+                        (otp, data.email))
             send_email_otp(otp, data.email)
+            conn.commit()
             response.status_code = status.HTTP_200_OK
             resp_dict = {"message" : f"OTP sent to {data.email}!"}
         else:
@@ -166,7 +210,6 @@ def genotp(data: loginObj, response: Response):
         resp_dict = {}
     finally:
         cur.close()
-        conn.commit()
         conn.close()
         return resp_dict
 
@@ -176,18 +219,21 @@ def login(data: loginObj, response: Response):
     cur = conn.cursor()
     try:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-        cur.execute(f"SELECT otp, user_type FROM user_account WHERE email = '{data.email}'")
+        cur.execute("SELECT otp, user_type FROM user_accounts WHERE email = %s",
+                    (data.email, ))
         row = cur.fetchall()
         if len(row) > 0:
             saved_otp = row[0][0]
             user_type = row[0][1]
             if saved_otp != None and saved_otp == data.otp:
                 token = ''.join(str(uuid.uuid4()).split('-'))
-                cur.execute(f"""
-                            UPDATE user_account 
-                            SET otp = NULL, token = '{token}', token_gen_time = '{datetime.utcnow()}' 
-                            WHERE email = '{data.email}'
-                            """)
+                cur.execute("""
+                            UPDATE user_accounts 
+                            SET otp = NULL, token = %s, token_gen_time = %s 
+                            WHERE email = %s
+                            """,
+                            (token, datetime.utcnow(), data.email))
+                conn.commit()
                 resp_dict = { 
                     "email" : data.email, 
                     "user_type" : user_type, 
@@ -207,30 +253,32 @@ def login(data: loginObj, response: Response):
         response.status_code = status.HTTP_400_BAD_REQUEST
     finally:
         cur.close()
-        conn.commit()
         conn.close()
         return resp_dict
 
-def _verify(token):
+def _verify_token(token):
     conn = connect()
     cur = conn.cursor()
     try:
-        verified = False
-        cur.execute(f"SELECT token_gen_time FROM user_account WHERE token = '{token}'")
+        verified = USER_TYPE(-1)
+        cur.execute("SELECT token_gen_time, user_type FROM user_accounts WHERE token = %s",
+                    (token, ))
         row = cur.fetchall()
         if len(row) > 0:
             timestp = row[0][0]
+            user_type = int(row[0][1])
             if (timestp - datetime.now(timezone.utc)).days < token_validity:
-                verified = True
+                verified = USER_TYPE(user_type)
             else:
-                cur.execute(f"""
-                            UPDATE user_account 
+                cur.execute("""
+                            UPDATE user_accounts 
                             SET token = NULL, token_gen_time = NULL 
-                            WHERE token = '{token}'
-                            """)
+                            WHERE token = %s
+                            """,
+                            (token, ))
+                conn.commit()
     finally:
         cur.close()
-        conn.commit()
         conn.close()
         return verified
 
@@ -244,8 +292,9 @@ def verify(data: verifyObj, response: Response):
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
         conn = connect()
         cur = conn.cursor()
-        if _verify(data.token):
-            cur.execute(f"SELECT email, user_type FROM user_account WHERE token = '{data.token}'")
+        if _verify_token(data.token) != USER_TYPE.INVALID:
+            cur.execute("SELECT email, user_type FROM user_accounts WHERE token = %s",
+                        (data.token, ))
             row = cur.fetchall()
             email = row[0][0]
             user_type = row[0][1]
@@ -264,3 +313,78 @@ def verify(data: verifyObj, response: Response):
         cur.close()
         conn.close()
         return resp_dict
+
+def _get_email_from_token(token: str):
+    conn = connect()
+    cur = conn.cursor()
+    try:
+        email = None
+        if _verify_token(token) != USER_TYPE.INVALID:
+            cur.execute("SELECT email FROM user_accounts WHERE token = %s",
+                        (token, ))
+            row = cur.fetchall()
+            if len(row) > 0:
+                email = str(row[0][0])
+    finally:
+        cur.close()
+        conn.close()
+        return email
+
+@router.post("/photo/{email}")
+def post_photo(
+    email: str,
+    file: UploadFile,
+    response: Response,
+    token: Annotated[Union[str, None], Header()] = None
+):
+    if (token is None or _verify_token(token) == USER_TYPE.INVALID):
+        response.status_code = status.HTTP_401_UNAUTHORIZED
+        resp_dict = {"message" : "Invalid token, please login again"}
+        return resp_dict
+    if _get_email_from_token(token) != email:
+        response.status_code = status.HTTP_401_UNAUTHORIZED
+        resp_dict = {"message" : "You can only upload photo for your own account"}
+        return resp_dict
+    conn = connect()
+    cur = conn.cursor()
+    # try:
+    response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    img = cv2.imdecode(numpy.fromstring(file.file.read(), numpy.uint8), cv2.IMREAD_UNCHANGED)
+    from app.routers.encodings import _img_to_base64
+    cur.execute("""
+                UPDATE user_accounts 
+                SET photo = %s 
+                WHERE email = %s
+                """,
+                (_img_to_base64(img, cvt_code=None, compression=20), email))
+    conn.commit()
+    response.status_code = status.HTTP_200_OK
+    resp_dict = {"message" : "Image saved successfully!"}
+    # except:
+    #    response.status_code = status.HTTP_400_BAD_REQUEST
+    #    resp_dict = {}
+    # finally:
+    cur.close()
+    conn.close()
+    return resp_dict
+
+@router.get("/photo/{email}")
+def get_photo(
+    email: str, 
+    response: Response,
+    token: Annotated[Union[str, None], Header()] = None
+):
+    if (token is None or _verify_token(token) == USER_TYPE.INVALID):
+        response.status_code = status.HTTP_401_UNAUTHORIZED
+        resp_dict = {"message" : "Invalid token, please login again"}
+        return resp_dict
+    conn = connect()
+    cur = conn.cursor()
+    cur.execute("SELECT photo from user_accounts WHERE email = %s",
+                (email, ))
+    resp_dict = {
+        "photo" : cur.fetchone()[0]
+    }
+    cur.close()
+    conn.close()
+    return resp_dict

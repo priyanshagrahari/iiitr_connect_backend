@@ -7,18 +7,18 @@ from app.routers.users import _verify_token
 
 conn = connect()
 router = APIRouter(
-    prefix="/students",
-    tags=["students"]
+    prefix="/professors",
+    tags=["professors"]
 )
 
-class student(BaseModel):
-    roll_num: str
+class professor(BaseModel):
+    email_prefix: str
     name: str
 
 # create one
 @router.post("/")
-def add_student(
-    data: student, 
+def add_professor(
+    data: professor, 
     response: Response,
     token: Annotated[Union[str, None], Header()] = None
 ):
@@ -30,31 +30,26 @@ def add_student(
     cur = conn.cursor()
     try:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-        valid = len(data.roll_num) == 9
-        if valid:
-            cur.execute("INSERT INTO students (roll_num, name) VALUES (%s, %s)", 
-                        (data.roll_num, data.name))
-            conn.commit()
-            resp_dict = data
-            response.status_code = status.HTTP_201_CREATED
-        else:
-            resp_dict = {"message" : "Invalid data"}
-            response.status_code = status.HTTP_400_BAD_REQUEST
+        cur.execute("INSERT INTO professors (email_prefix, name) VALUES (%s, %s)", 
+                    (data.email_prefix, data.name))
+        conn.commit()
+        resp_dict = data
+        response.status_code = status.HTTP_201_CREATED
     except:
-        resp_dict = {"message" : "Roll number may already exist"}
+        resp_dict = {"message" : "Email prefix may already exist"}
         response.status_code = status.HTTP_400_BAD_REQUEST
     finally:
         cur.close()
         conn.close()
         return resp_dict
 
-def _roll_num_exists(roll_num: str):
+def _email_prefix_exists(email_prefix: str):
     conn = connect()
     cur = conn.cursor()
     exists = False
     try:
-        cur.execute("SELECT roll_num FROM students WHERE roll_num = %s",
-                    (roll_num, ))
+        cur.execute("SELECT email_prefix FROM professors WHERE email_prefix = %s",
+                    (email_prefix, ))
         if len(cur.fetchall()) > 0:
             exists = True
         else:
@@ -65,9 +60,9 @@ def _roll_num_exists(roll_num: str):
         return exists
 
 # retrieve one/all
-@router.get("/{roll_num}")
-def get_student(
-    roll_num: str, 
+@router.get("/{email_prefix}")
+def get_professor(
+    email_prefix: str, 
     response: Response,
     token: Annotated[Union[str, None], Header()] = None
 ):
@@ -79,18 +74,18 @@ def get_student(
     cur = conn.cursor()
     try:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-        col_names = ['roll_num', 'name']
-        if roll_num != 'all':
-            cur.execute("SELECT roll_num, name FROM students WHERE roll_num = %s",
-                        (roll_num, ))
+        col_names = ['email_prefix', 'name']
+        if email_prefix != 'all':
+            cur.execute("SELECT email_prefix, name FROM professors WHERE email_prefix = %s",
+                        (email_prefix, ))
         else:
-            cur.execute("SELECT roll_num, name FROM students ORDER BY roll_num ASC")
-        students = conv_to_dict("students", cur.fetchall(), col_names)
-        if len(students) > 0:
-            resp_dict = students
+            cur.execute("SELECT email_prefix, name FROM professors ORDER BY email_prefix ASC")
+        professors = conv_to_dict("professors", cur.fetchall(), col_names)
+        if len(professors) > 0:
+            resp_dict = professors
             response.status_code = status.HTTP_200_OK
         else:
-            resp_dict = {"message" : "Roll number not found"}
+            resp_dict = {"message" : "Email prefix not found"}
             response.status_code = status.HTTP_404_NOT_FOUND
     except:
         resp_dict = {}
@@ -101,10 +96,10 @@ def get_student(
         return resp_dict
 
 # update one
-@router.post("/{roll_num}")
-def update_student(
-    data: student, 
-    roll_num: str, response: Response,
+@router.post("/{email_prefix}")
+def update_professor(
+    data: professor, 
+    email_prefix: str, response: Response,
     token: Annotated[Union[str, None], Header()] = None
 ):
     if (token is None or _verify_token(token).value < USER_TYPE.SEPARATOR.value):
@@ -115,26 +110,21 @@ def update_student(
     cur = conn.cursor()
     try:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-        cur.execute("SELECT roll_num FROM students WHERE students.roll_num = %s",
-                    (roll_num, ))
+        cur.execute("SELECT email_prefix FROM professors WHERE email_prefix = %s",
+                    (email_prefix, ))
         matches = cur.fetchall()
         if len(matches) > 0:
-            valid = len(data.roll_num) == 9
-            if valid:
-                cur.execute("""
-                            UPDATE students
-                            SET roll_num = %s, name = %s
-                            WHERE roll_num = %s
-                            """,
-                            (data.roll_num, data.name, roll_num))
-                conn.commit()
-                resp_dict = data
-                response.status_code = status.HTTP_200_OK
-            else:
-                resp_dict = {}
-                response.status_code = status.HTTP_400_BAD_REQUEST
+            cur.execute("""
+                        UPDATE professors
+                        SET email_prefix = %s, name = %s
+                        WHERE email_prefix = %s;
+                        """,
+                        (data.email_prefix, data.name, email_prefix))
+            conn.commit()
+            resp_dict = data
+            response.status_code = status.HTTP_200_OK
         else:
-            resp_dict = {"message" : "Given roll number was not found!"}
+            resp_dict = {"message" : "Given email prefix was not found!"}
             response.status_code = status.HTTP_404_NOT_FOUND
     except:
         resp_dict = {}
@@ -146,9 +136,9 @@ def update_student(
 
 
 # delete one/all
-@router.delete("/{roll_num}")
-def delete_student(
-    roll_num: str, 
+@router.delete("/{email_prefix}")
+def delete_professor(
+    email_prefix: str, 
     response: Response,
     token: Annotated[Union[str, None], Header()] = None
 ):
@@ -160,28 +150,23 @@ def delete_student(
     cur = conn.cursor()
     try:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-        col_names = ['roll_num', 'name']
-        if roll_num != 'all':
-            valid = len(roll_num) == 9
-            if valid:
-                cur.execute("SELECT roll_num, name FROM students WHERE roll_num = %s",
-                            (roll_num, ))
-                row = conv_to_dict("students", cur.fetchall(), col_names)
-                if len(row) > 0:
-                    cur.execute("DELETE FROM students WHERE roll_num = %s",
-                                (roll_num, ))
-                    resp_dict = row
-                    response.status_code = status.HTTP_200_OK
-                else:
-                    resp_dict = {}
-                    response.status_code = status.HTTP_404_NOT_FOUND
+        col_names = ['email_prefix', 'name']
+        if email_prefix != 'all':
+            cur.execute("SELECT email_prefix, name FROM professors WHERE email_prefix = %s",
+                        (email_prefix, ))
+            row = conv_to_dict("professors", cur.fetchall(), col_names)
+            if len(row) > 0:
+                cur.execute("DELETE FROM professors WHERE email_prefix = %s",
+                            (email_prefix, ))
+                resp_dict = row
+                response.status_code = status.HTTP_200_OK
             else:
                 resp_dict = {}
-                response.status_code = status.HTTP_400_BAD_REQUEST
+                response.status_code = status.HTTP_404_NOT_FOUND
         else:
-            cur.execute("SELECT roll_num, name FROM students")
-            rows = conv_to_dict("students", cur.fetchall(), col_names)
-            cur.execute("DELETE FROM students")
+            cur.execute("SELECT email_prefix, name FROM professors")
+            rows = conv_to_dict("professors", cur.fetchall(), col_names)
+            cur.execute("DELETE FROM professors")
             resp_dict = rows
             response.status_code = status.HTTP_200_OK
         conn.commit()

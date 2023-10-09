@@ -2,4 +2,7 @@ uvicorn[standard]
 fastapi
 pydantic
 python-dotenv
-psycopg2-binary~=2.9.6
+psycopg2-binary
+python-multipart
+face_recognition
+opencv-python
