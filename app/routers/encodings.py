@@ -1,7 +1,6 @@
 import base64
-import aiofiles
-from fastapi import APIRouter, Response, status, UploadFile, File, Form, Header
-from fastapi.responses import FileResponse
+import numpy as np
+from fastapi import APIRouter, Response, status, UploadFile, Header
 from typing import Annotated, Union
 from app.database import connect
 from app.routers.users import _verify_token, _get_email_from_token
@@ -10,7 +9,6 @@ import face_recognition
 import cv2
 from io import BytesIO
 from app.config import IMG_CACHE_LOCATION
-from pathlib import Path
 from app.common import conv_to_dict, USER_TYPE
 
 from time import time
@@ -22,7 +20,7 @@ router = APIRouter(
     tags=["encodings"]
 )
 
-@router.post("/upload/{roll_num}")
+@router.post("/student/{roll_num}")
 async def upload_image(
     file: UploadFile,
     roll_num: str,
@@ -42,8 +40,11 @@ async def upload_image(
     if valid: 
         exists = _roll_num_exists(roll_num)
     if valid and exists:
-        face = face_recognition.load_image_file(file.file)
+        face = cv2.imdecode(np.fromstring(file.file.read(), np.uint8), cv2.IMREAD_UNCHANGED)
         face_locations = face_recognition.face_locations(face)
+        path = IMG_CACHE_LOCATION + f"/{datetime.utcnow().timestamp()}_{roll_num}.jpg"
+        print("will save to ", path)
+        cv2.imwrite(path, face)
         if len(face_locations) == 1:
             face_enc = face_recognition.face_encodings(face)[0]
             cur.execute("""
@@ -55,11 +56,26 @@ async def upload_image(
             conn.commit()
             # mark face bounding box in image and return base64 encoding
             y1, x2, y2, x1 = face_locations[0][0], face_locations[0][1], face_locations[0][2], face_locations[0][3]
-            cv2.rectangle(face, (x1, y1), (x2, y2), (0, 0, 255), 4)
+            height, width = face.shape[:2]
+            #cv2.rectangle(face, (x1, y1), (x2, y2), (0, 0, 255), 4)
             response.status_code = status.HTTP_200_OK
             resp_dict = {
                 "message" : "Face encoding saved successfully!",
-                "image" : _img_to_base64(face)
+                "face" : [
+                    {
+                        "x" : x1,
+                        "y" : y1
+                    },
+                    {
+                        "x" : x2,
+                        "y" : y2
+                    },
+                ],
+                "dimensions" : {
+                    "height" : height,
+                    "width" : width
+                },
+                #"image" : _img_to_base64(face)
                 }
         else:
             response.status_code = status.HTTP_400_BAD_REQUEST
@@ -92,7 +108,7 @@ def _img_to_base64(img, cvt_code = cv2.COLOR_RGB2BGR, compression = 50, return_s
         return img_64
     return None
 
-@router.delete("/{roll_num}")
+@router.delete("/student/{roll_num}")
 def delete_encodings(
     roll_num: str, 
     response: Response,

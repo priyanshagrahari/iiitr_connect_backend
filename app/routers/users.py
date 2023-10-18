@@ -195,7 +195,7 @@ def genotp(data: loginObj, response: Response):
                     (data.email, ))
         if len(cur.fetchall()) > 0:
             random.seed(time())
-            otp = random.randint(111111, 999999)
+            otp = random.randint(1111, 9999)
             cur.execute("UPDATE user_accounts SET otp = %s WHERE email = %s",
                         (otp, data.email))
             send_email_otp(otp, data.email)
@@ -207,7 +207,7 @@ def genotp(data: loginObj, response: Response):
             resp_dict = {"message" : "Given email is not registered :("}
     except:
         response.status_code = status.HTTP_400_BAD_REQUEST
-        resp_dict = {}
+        resp_dict = {"message" : "Bad request?"}
     finally:
         cur.close()
         conn.close()

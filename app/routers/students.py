@@ -71,7 +71,9 @@ def get_student(
     response: Response,
     token: Annotated[Union[str, None], Header()] = None
 ):
-    if (token is None or _verify_token(token).value < USER_TYPE.SEPARATOR.value):
+    user_type = _verify_token(token)
+    if ((token is None or _verify_token(token) == USER_TYPE.INVALID) or
+        (roll_num == 'all' and user_type.value < USER_TYPE.SEPARATOR)):
         response.status_code = status.HTTP_401_UNAUTHORIZED
         resp_dict = {"message" : "Invalid token, please login again"}
         return resp_dict

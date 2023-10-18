@@ -45,11 +45,18 @@ def init():
     """)
 
     # add yourself as admin :)
+    # cur.execute("""
+    # INSERT INTO user_accounts (email, user_type) VALUES (%s, %s) 
+    # ON CONFLICT (email) DO UPDATE SET user_type = %s
+    # """, 
+    # ('cs20b1014@iiitr.ac.in', USER_TYPE.ADMIN.value, USER_TYPE.ADMIN.value))
+
+    # add ramesh sir
     cur.execute("""
     INSERT INTO user_accounts (email, user_type) VALUES (%s, %s) 
     ON CONFLICT (email) DO UPDATE SET user_type = %s
     """, 
-    ('cs20b1014@iiitr.ac.in', USER_TYPE.ADMIN.value, USER_TYPE.ADMIN.value))
+    ('jallu@iiitr.ac.in', USER_TYPE.PROFESSOR.value, USER_TYPE.PROFESSOR.value))
 
     # create students table if not exists
     cur.execute("""
@@ -61,6 +68,13 @@ def init():
     )
     """)
 
+    # add yourself as student
+    cur.execute("""
+    INSERT INTO students (roll_num, name) VALUES (%s, %s) 
+    ON CONFLICT (roll_num) DO UPDATE SET roll_num = %s
+    """, 
+    ('cs20b1014', 'Priyansh Agrahari', 'cs20b1014'))
+
     # create professors table if not exists
     cur.execute("""
     CREATE TABLE IF NOT EXISTS public.professors
@@ -71,35 +85,44 @@ def init():
     )
     """)
 
+    # add ramesh sir as prof
+    cur.execute("""
+    INSERT INTO professors (email_prefix, name) VALUES (%s, %s) 
+    ON CONFLICT (email_prefix) DO UPDATE SET email_prefix = %s
+    """, 
+    ('jallu', 'Ramesh Kumar Jallu', 'jallu'))
+
     # create courses table if not exists
     cur.execute("""
     CREATE TABLE IF NOT EXISTS public.courses
     (
+        course_id uuid NOT NULL DEFAULT uuid_generate_v4(),
         course_code character varying COLLATE pg_catalog."default" NOT NULL,
         name character varying COLLATE pg_catalog."default" NOT NULL,
-        begin_date date,
+        begin_date date NOT NULL,
         end_date date,
         accepting_reg boolean NOT NULL DEFAULT true,
         description character varying COLLATE pg_catalog."default" NOT NULL,
-        CONSTRAINT course_pkey PRIMARY KEY (course_code, begin_date)
+        CONSTRAINT course_id_key PRIMARY KEY (course_id),
+        CONSTRAINT course_pkey UNIQUE (course_code, begin_date)
     )
     """)
-
+    
     # create profs_courses table if not exists
     cur.execute("""
     CREATE TABLE IF NOT EXISTS public.profs_courses
     (
         prof_prefix character varying COLLATE pg_catalog."default" NOT NULL,
-        course_code character varying COLLATE pg_catalog."default" NOT NULL,
-        CONSTRAINT profs_courses_pkey PRIMARY KEY (prof_prefix, course_code),
-        CONSTRAINT profs_courses_course_code_fkey FOREIGN KEY (course_code)
-            REFERENCES public.courses (course_code) MATCH SIMPLE
+        course_id uuid NOT NULL,
+        CONSTRAINT profs_courses_pkey PRIMARY KEY (prof_prefix, course_id),
+        CONSTRAINT profs_courses_course_id_fkey FOREIGN KEY (course_id)
+            REFERENCES public.courses (course_id) MATCH SIMPLE
             ON UPDATE NO ACTION
-            ON DELETE NO ACTION,
+            ON DELETE CASCADE,
         CONSTRAINT profs_courses_prof_prefix_fkey FOREIGN KEY (prof_prefix)
             REFERENCES public.professors (email_prefix) MATCH SIMPLE
             ON UPDATE NO ACTION
-            ON DELETE NO ACTION
+            ON DELETE CASCADE
     )
     """)
 
@@ -108,13 +131,14 @@ def init():
     CREATE TABLE IF NOT EXISTS public.lectures
     (
         lecture_id uuid NOT NULL DEFAULT uuid_generate_v4(),
-        course_code character varying COLLATE pg_catalog."default" NOT NULL,
-        description character varying(255) COLLATE pg_catalog."default",
-        CONSTRAINT lecture_pkey PRIMARY KEY (lecture_id),
-        CONSTRAINT lecture_course_code_fkey FOREIGN KEY (course_code)
-            REFERENCES public.courses (course_code) MATCH SIMPLE
+        course_id uuid NOT NULL,
+        lecture_date date NOT NULL,
+        description character varying COLLATE pg_catalog."default",
+        CONSTRAINT lectures_pkey PRIMARY KEY (lecture_id),
+        CONSTRAINT lectures_course_id_fkey FOREIGN KEY (course_id)
+            REFERENCES public.courses (course_id) MATCH SIMPLE
             ON UPDATE NO ACTION
-            ON DELETE NO ACTION
+            ON DELETE CASCADE
     )
     """)
 
@@ -122,17 +146,17 @@ def init():
     cur.execute("""
     CREATE TABLE IF NOT EXISTS public.course_registrations
     (
-        course_code character varying COLLATE pg_catalog."default" NOT NULL,
+        course_id uuid NOT NULL,
         student_roll character(9) COLLATE pg_catalog."default" NOT NULL,
-        CONSTRAINT course_registrations_pkey PRIMARY KEY (course_code, student_roll),
-        CONSTRAINT course_registrations_course_code_fkey FOREIGN KEY (course_code)
-            REFERENCES public.courses (course_code) MATCH SIMPLE
+        CONSTRAINT course_registrations_pkey PRIMARY KEY (course_id, student_roll),
+        CONSTRAINT course_registrations_course_id_fkey FOREIGN KEY (course_id)
+            REFERENCES public.courses (course_id) MATCH SIMPLE
             ON UPDATE NO ACTION
-            ON DELETE NO ACTION,
+            ON DELETE CASCADE,
         CONSTRAINT course_registrations_student_roll_fkey FOREIGN KEY (student_roll)
             REFERENCES public.students (roll_num) MATCH SIMPLE
             ON UPDATE NO ACTION
-            ON DELETE NO ACTION
+            ON DELETE CASCADE
     )
     """)
 
@@ -146,11 +170,11 @@ def init():
         CONSTRAINT attendances_lecture_id_fkey FOREIGN KEY (lecture_id)
             REFERENCES public.lectures (lecture_id) MATCH SIMPLE
             ON UPDATE NO ACTION
-            ON DELETE NO ACTION,
+            ON DELETE CASCADE,
         CONSTRAINT attendances_student_roll_fkey FOREIGN KEY (student_roll)
             REFERENCES public.students (roll_num) MATCH SIMPLE
             ON UPDATE NO ACTION
-            ON DELETE NO ACTION
+            ON DELETE CASCADE
     )
     """)
 
@@ -158,13 +182,15 @@ def init():
     cur.execute("""
     CREATE TABLE IF NOT EXISTS public.face_encodings
     (
+        encoding_id uuid NOT NULL DEFAULT uuid_generate_v4(),
         roll_num character(9) COLLATE pg_catalog."default" NOT NULL,
         face_encoding numeric[] NOT NULL,
         creation_time timestamp with time zone NOT NULL,
+        CONSTRAINT face_encodings_pkey PRIMARY KEY (encoding_id),
         CONSTRAINT face_encodings_roll_num_fkey FOREIGN KEY (roll_num)
             REFERENCES public.students (roll_num) MATCH SIMPLE
             ON UPDATE NO ACTION
-            ON DELETE NO ACTION
+            ON DELETE CASCADE
     )
     """)
 

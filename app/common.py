@@ -6,7 +6,7 @@ def conv_to_dict(key, data, columns):
     if len(data) == 0:
         return {}
     if len(data[0]) != len(columns):
-        raise Exception('number of columns mismatched')
+        print('number of columns mismatched: ', key, ' ', columns)
     data_dict_list = []
     for row in data:
         data_dict_list.append(dict(zip(columns, row)))

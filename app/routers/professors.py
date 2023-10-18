@@ -66,7 +66,9 @@ def get_professor(
     response: Response,
     token: Annotated[Union[str, None], Header()] = None
 ):
-    if (token is None or _verify_token(token).value < USER_TYPE.SEPARATOR.value):
+    user_type = _verify_token(token)
+    if ((token is None or user_type == USER_TYPE.INVALID) or 
+        (email_prefix == 'all' and user_type.value < USER_TYPE.SEPARATOR.value)):
         response.status_code = status.HTTP_401_UNAUTHORIZED
         resp_dict = {"message" : "Invalid token, please login again"}
         return resp_dict

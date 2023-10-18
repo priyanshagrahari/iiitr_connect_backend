@@ -8,13 +8,13 @@ def send_email_otp( otp = 0, send_to = "cs20b1014@iiitr.ac.in" ):
   smtp_server = MAIL_HOST
   sender_email = MAIL_USERNAME
   password = MAIL_PASSWORD
+  otp_text = f'{otp:04}'
 
   message = MIMEMultipart("alternative")
-  message["Subject"] = f"Your OTP is {otp} | IIITR Connect"
+  message["Subject"] = f"Your OTP is {otp_text} | IIITR Connect"
   message["From"] = sender_email
   message["To"] = send_to
 
-  otp_text = f'{otp:06}'
   text = f"""\
   Your OTP for logging in is:
   {otp_text}
