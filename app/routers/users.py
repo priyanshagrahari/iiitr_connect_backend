@@ -55,6 +55,28 @@ def create_user(
         conn.close()
         return resp_dict
 
+class student(BaseModel):
+    roll_num: str
+    name: str
+
+@router.post("/create_student")
+def create_student_user(
+    data: student,
+    response: Response,
+):
+    conn = connect()
+    cur = conn.cursor()
+    cur.execute("INSERT INTO user_accounts (email,user_type) VALUES (%s, %s)", 
+                (f"{data.roll_num}@iiitr.ac.in", 0))
+    cur.execute("INSERT INTO students (roll_num, name) VALUES (%s, %s)", 
+                (data.roll_num, data.name))
+    conn.commit()
+    resp_dict = data
+    response.status_code = status.HTTP_201_CREATED
+    cur.close()
+    conn.close()
+    return resp_dict
+
 # retrieve one/all
 @router.get("/get/{email}")
 def get_users(
@@ -260,15 +282,15 @@ def _verify_token(token):
     conn = connect()
     cur = conn.cursor()
     try:
-        verified = USER_TYPE(-1)
+        verified_type = USER_TYPE(-1)
         cur.execute("SELECT token_gen_time, user_type FROM user_accounts WHERE token = %s",
                     (token, ))
         row = cur.fetchall()
         if len(row) > 0:
-            timestp = row[0][0]
+            gen_time = row[0][0]
             user_type = int(row[0][1])
-            if (timestp - datetime.now(timezone.utc)).days < token_validity:
-                verified = USER_TYPE(user_type)
+            if (datetime.now(timezone.utc) - gen_time).days < token_validity:
+                verified_type = USER_TYPE(user_type)
             else:
                 cur.execute("""
                             UPDATE user_accounts 
@@ -280,7 +302,7 @@ def _verify_token(token):
     finally:
         cur.close()
         conn.close()
-        return verified
+        return verified_type
 
 class verifyObj(BaseModel):
     token: str

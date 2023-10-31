@@ -133,6 +133,7 @@ def init():
         lecture_id uuid NOT NULL DEFAULT uuid_generate_v4(),
         course_id uuid NOT NULL,
         lecture_date date NOT NULL,
+        atten_marked boolean NOT NULL DEFAULT false,
         description character varying COLLATE pg_catalog."default",
         CONSTRAINT lectures_pkey PRIMARY KEY (lecture_id),
         CONSTRAINT lectures_course_id_fkey FOREIGN KEY (course_id)
@@ -146,9 +147,11 @@ def init():
     cur.execute("""
     CREATE TABLE IF NOT EXISTS public.course_registrations
     (
+        registration_id uuid NOT NULL DEFAULT uuid_generate_v4(),
         course_id uuid NOT NULL,
         student_roll character(9) COLLATE pg_catalog."default" NOT NULL,
-        CONSTRAINT course_registrations_pkey PRIMARY KEY (course_id, student_roll),
+        CONSTRAINT course_registrations_pkey PRIMARY KEY (registration_id),
+        CONSTRAINT course_registrations_course_id_student_roll_key UNIQUE (course_id, student_roll),
         CONSTRAINT course_registrations_course_id_fkey FOREIGN KEY (course_id)
             REFERENCES public.courses (course_id) MATCH SIMPLE
             ON UPDATE NO ACTION
@@ -164,15 +167,15 @@ def init():
     cur.execute("""
     CREATE TABLE IF NOT EXISTS public.attendances
     (
+        registration_id uuid NOT NULL,
         lecture_id uuid NOT NULL,
-        student_roll character(9) COLLATE pg_catalog."default" NOT NULL,
-        CONSTRAINT attendances_pkey PRIMARY KEY (lecture_id, student_roll),
+        CONSTRAINT attendances_pkey PRIMARY KEY (lecture_id, registration_id),
         CONSTRAINT attendances_lecture_id_fkey FOREIGN KEY (lecture_id)
             REFERENCES public.lectures (lecture_id) MATCH SIMPLE
             ON UPDATE NO ACTION
             ON DELETE CASCADE,
-        CONSTRAINT attendances_student_roll_fkey FOREIGN KEY (student_roll)
-            REFERENCES public.students (roll_num) MATCH SIMPLE
+        CONSTRAINT attendances_registration_id_fkey FOREIGN KEY (registration_id)
+            REFERENCES public.course_registrations (registration_id) MATCH SIMPLE
             ON UPDATE NO ACTION
             ON DELETE CASCADE
     )
@@ -184,8 +187,8 @@ def init():
     (
         encoding_id uuid NOT NULL DEFAULT uuid_generate_v4(),
         roll_num character(9) COLLATE pg_catalog."default" NOT NULL,
-        face_encoding numeric[] NOT NULL,
         creation_time timestamp with time zone NOT NULL,
+        face_encoding numeric[] NOT NULL,
         CONSTRAINT face_encodings_pkey PRIMARY KEY (encoding_id),
         CONSTRAINT face_encodings_roll_num_fkey FOREIGN KEY (roll_num)
             REFERENCES public.students (roll_num) MATCH SIMPLE

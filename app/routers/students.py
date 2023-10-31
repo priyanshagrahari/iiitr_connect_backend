@@ -10,13 +10,14 @@ router = APIRouter(
     prefix="/students",
     tags=["students"]
 )
+col_names = ['roll_num', 'name']
 
 class student(BaseModel):
     roll_num: str
     name: str
 
 # create one
-@router.post("/")
+@router.post("/create")
 def add_student(
     data: student, 
     response: Response,
@@ -65,7 +66,7 @@ def _roll_num_exists(roll_num: str):
         return exists
 
 # retrieve one/all
-@router.get("/{roll_num}")
+@router.get("/get/{roll_num}")
 def get_student(
     roll_num: str, 
     response: Response,
@@ -81,7 +82,6 @@ def get_student(
     cur = conn.cursor()
     try:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-        col_names = ['roll_num', 'name']
         if roll_num != 'all':
             cur.execute("SELECT roll_num, name FROM students WHERE roll_num = %s",
                         (roll_num, ))
@@ -102,8 +102,22 @@ def get_student(
         conn.close()
         return resp_dict
 
+def _get_student_from_roll_num(roll_num: str):
+    if not _roll_num_exists(roll_num):
+        return None
+    else:
+        conn = connect()
+        cur = conn.cursor()
+        cur.execute("SELECT roll_num, name FROM students WHERE roll_num = %s",
+                    (roll_num, ))
+        student_dict = conv_to_dict('student', cur.fetchall(), col_names)
+        student = student_dict['student'][0]
+        cur.close()
+        conn.close()
+        return student
+
 # update one
-@router.post("/{roll_num}")
+@router.post("/update/{roll_num}")
 def update_student(
     data: student, 
     roll_num: str, response: Response,
@@ -148,7 +162,7 @@ def update_student(
 
 
 # delete one/all
-@router.delete("/{roll_num}")
+@router.delete("/delete/{roll_num}")
 def delete_student(
     roll_num: str, 
     response: Response,

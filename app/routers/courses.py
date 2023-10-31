@@ -16,7 +16,6 @@ router = APIRouter(
 col_names = ['course_id', 'course_code', 'name',
              'begin_date', 'end_date', 'accepting_reg', 'description']
 
-
 class course(BaseModel):
     course_code: str
     name: str
@@ -64,7 +63,7 @@ def add_course(
                         (prefix, course_id))
         conn.commit()
         resp_dict = dict(data)
-        resp_dict['message'] = "Course created successfully!"
+        resp_dict['message'] = "Course added successfully!"
         response.status_code = status.HTTP_201_CREATED
     except:
         resp_dict = {"message" : "Course code and begin date must be a unique tuple"}
@@ -73,7 +72,6 @@ def add_course(
         cur.close()
         conn.close()
         return resp_dict
-
 
 def _course_id_exists(course_id: str):
     conn = connect()
@@ -137,6 +135,23 @@ def get_course(
         conn.close()
         return resp_dict
 
+def _get_course_from_id(course_id: str):
+    if _course_id_exists(course_id):
+        conn = connect()
+        cur = conn.cursor()
+        cur.execute("""
+                    SELECT course_id, course_code, name, begin_date, end_date, accepting_reg, description
+                    FROM courses WHERE course_id = %s
+                    """,
+                    (course_id, ))
+        course_dict = conv_to_dict("course", cur.fetchall(), col_names)
+        course = course_dict['course'][0]
+        cur.close()
+        conn.close()
+        return course
+    else:
+        return None
+
 # update one
 @router.post("/update/{course_id}")
 def update_course(
@@ -189,7 +204,6 @@ def update_course(
     conn.close()
     return resp_dict
 
-
 # delete one/all
 @router.delete("/delete/{course_id}")
 def delete_course(
@@ -212,7 +226,7 @@ def delete_course(
                         """,
                         (course_id, ))
             row = conv_to_dict("courses", cur.fetchall(), col_names)
-            if len(row) > 0:
+            if len(row['courses']) > 0:
                 cur.execute("DELETE FROM courses WHERE course_id = %s",
                             (course_id, ))
                 resp_dict = dict(row)
@@ -270,19 +284,19 @@ def get_prof_courses(
                         """,
                         (course_id[0], ))
             courses.append(cur.fetchone())
-        courses = conv_to_dict("courses", courses, col_names)
-        for course in courses['courses']:
-            course['is_running'] = (
-                course['end_date'] >= datetime.today().date())
-            cur.execute("SELECT prof_prefix FROM profs_courses WHERE course_id = %s",
-                        (course['course_id'], ))
-            profs = [i[0] for i in cur.fetchall()]
-            course['profs'] = profs
         if len(courses) > 0:
+            courses = conv_to_dict("courses", courses, col_names)
+            for course in courses['courses']:
+                course['is_running'] = (
+                    course['end_date'] >= datetime.today().date())
+                cur.execute("SELECT prof_prefix FROM profs_courses WHERE course_id = %s",
+                            (course['course_id'], ))
+                profs = [i[0] for i in cur.fetchall()]
+                course['profs'] = profs
             resp_dict = courses
             response.status_code = status.HTTP_200_OK
         else:
-            resp_dict = {"message": "No courses found..."}
+            resp_dict = {"message": "No courses found"}
             response.status_code = status.HTTP_404_NOT_FOUND
     else:
         resp_dict = {"message": "Email prefix not found"}
