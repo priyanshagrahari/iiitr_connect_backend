@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from app.routers import users, students, encodings, professors, courses, lectures, registrations
+from app.routers import users, students, encodings, professors, courses, lectures, registrations, attendances
 
 
 app = FastAPI()
@@ -12,6 +12,7 @@ app.include_router(professors.router)
 app.include_router(courses.router)
 app.include_router(lectures.router)
 app.include_router(registrations.router)
+app.include_router(attendances.router)
 
 @app.get("/")
 async def root():

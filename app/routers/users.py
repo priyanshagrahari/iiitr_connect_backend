@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from app.database import connect
 from app.send_email import send_email_otp
 from app.common import user_type_to_str, is_email_valid, conv_to_dict, USER_TYPE
+import pandas as pd
 
 import random
 import uuid
@@ -407,6 +408,46 @@ def get_photo(
     resp_dict = {
         "photo" : cur.fetchone()[0]
     }
+    cur.close()
+    conn.close()
+    return resp_dict
+
+# add students from excel spreadsheet
+@router.post("/excel/add_students")
+def add_students_from_xlsx(
+    file: UploadFile,
+    response: Response,
+    token: Annotated[Union[str, None], Header()] = None
+):
+    if (token is None or _verify_token(token) != USER_TYPE.ADMIN):
+        response.status_code = status.HTTP_401_UNAUTHORIZED
+        resp_dict = {"message" : "Invalid token, please login again"}
+        return resp_dict
+    df = pd.read_excel(file.file)
+    rollnum_colname = df.columns.to_list()[0]
+    name_colname = df.columns.to_list()[1]
+    conn = connect()
+    cur = conn.cursor()
+    isvalid = False
+    for index, row in df.iterrows():
+        roll_num = row[rollnum_colname].lower()
+        name = row[name_colname].title().replace('.', '')
+        isvalid = len(roll_num) == 9 and ''.join(name.split()).isalpha()
+        if isvalid:
+            cur.execute("INSERT INTO user_accounts (email,user_type) VALUES (%s, %s)", 
+                        (f"{roll_num}@iiitr.ac.in", 0))
+            cur.execute("INSERT INTO students (roll_num, name) VALUES (%s, %s)", 
+                        (roll_num, name))
+        else:
+            break
+    if isvalid:
+        conn.commit()
+        response.status_code = status.HTTP_201_CREATED
+        resp_dict = {'message' : 'Students added successfully!'}
+    else:
+        response.status_code = status.HTTP_400_BAD_REQUEST
+        resp_dict = {'message' : '''Invalid data provided. 
+                     Please make sure that the first column contains the roll numbers and the second column contains the name only'''}
     cur.close()
     conn.close()
     return resp_dict
