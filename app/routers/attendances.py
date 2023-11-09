@@ -1,11 +1,19 @@
+from datetime import datetime
 from typing import Annotated, List, Union
 from fastapi import APIRouter, Header, Response, status
 from pydantic import BaseModel
-from app.common import USER_TYPE, conv_to_dict
+from app.common import USER_TYPE
+from app.config import SHEET_CACHE_LOCATION
 from app.database import connect
 from app.routers.lectures import _lecture_id_exists
+from app.routers.registrations import _get_reg_students_from_course_id
 from app.routers.students import _get_student_from_roll_num
 from app.routers.users import _verify_token
+from openpyxl import Workbook
+from openpyxl.formatting.rule import ColorScaleRule
+from openpyxl.comments import Comment
+
+from app.send_email import send_attendance_sheet_email
 
 conn = connect()
 router = APIRouter(
@@ -152,7 +160,10 @@ def get_course_attendance(
         return resp_dict
     conn = connect()
     cur = conn.cursor()
-    cur.execute("SELECT lecture_id, lecture_date, atten_marked FROM lectures WHERE course_id = %s",
+    cur.execute("""
+                SELECT lecture_id, lecture_date, atten_marked FROM lectures WHERE course_id = %s
+                ORDER BY lecture_date DESC
+                """,
                 (course_id, ))
     lectures = cur.fetchall()
     cur.execute("""
@@ -259,3 +270,86 @@ def get_stud_attendance(
     cur.close()
     conn.close()
     return resp_dict
+
+# send filtered spreadsheet to email address
+@router.get("/sheet/{course_id}")
+def send_attendance_to_email(
+    course_id: str,
+    response: Response,
+    token: Annotated[Union[str, None], Header()] = None
+):
+    if (token is None or _verify_token(token).value < USER_TYPE.SEPARATOR.value):
+        response.status_code = status.HTTP_401_UNAUTHORIZED
+        resp_dict = {"message": "Invalid token, please login again"}
+        return resp_dict
+    conn = connect()
+    cur = conn.cursor()
+    cur.execute('SELECT name, course_code FROM courses WHERE course_id = %s',
+                (course_id, ))
+    course = cur.fetchone()
+    filename = f"/{course[0]}_{course[1]}__{datetime.now().date()}.xlsx"
+    save_path = SHEET_CACHE_LOCATION + filename
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet['A1'] = "Roll Num"
+    sheet.column_dimensions['A'].width = 15
+    sheet['B1'] = "Student Name"
+    sheet.column_dimensions['B'].width = 35
+    sheet['C1'] = "%"
+    sheet.column_dimensions['C'].width = 10
+    sheet.freeze_panes = "B2"
+    colorRule = ColorScaleRule(
+        start_type='num', start_value=0, start_color='FFFF0000', # AARRGGBB
+        end_type='num', end_value=1, end_color='0000FF00')
+    sheet.conditional_formatting.add("D2:AZ9999", colorRule)
+    cur.execute("""
+                SELECT lecture_id, lecture_date, atten_marked, description FROM lectures WHERE course_id = %s
+                ORDER BY lecture_date
+                """,
+                (course_id, ))
+    lectures = cur.fetchall()
+    lecture_col_dict = {}
+    for idx in range(0, len(lectures)):
+        if lectures[idx][2]:
+            letter = chr(ord('D') + idx)
+            sheet[f"{letter}1"] = lectures[idx][1]
+            sheet[f"{letter}1"].comment = Comment(lectures[idx][3], 'Lecture Description')
+            sheet.column_dimensions[letter].width = 13
+            lecture_col_dict[lectures[idx][0]] = letter
+    students = _get_reg_students_from_course_id(course_id)
+    for idx in range(0, len(students)):
+        row_num = idx + 2
+        sheet[f'A{row_num}'] = students[idx][1]
+        sheet[f'B{row_num}'] = students[idx][2]
+        sheet[f'C{row_num}'] = f'=SUM(D{row_num}:AZ{row_num})/COUNT(D{row_num}:AZ{row_num})*100'
+        cur.execute("""
+                    SELECT lectures.lecture_id, COUNT(attendances.registration_id)
+                    FROM lectures
+                    INNER JOIN attendances 
+                    ON lectures.lecture_id = attendances.lecture_id
+                    AND attendances.registration_id = %s
+                    AND lectures.course_id = %s
+                    GROUP BY lectures.lecture_id
+                    """,
+                    (students[idx][0], course_id))
+        present_lectures = cur.fetchall()
+        present_lecture_dict = {}
+        for row in present_lectures:
+            lec_id = row[0]
+            if row[1] != 0:
+                present_lecture_dict[lec_id] = 1
+        for lec_id in lecture_col_dict.keys():
+            if lec_id in present_lecture_dict.keys():
+                sheet[f'{lecture_col_dict[lec_id]}{row_num}'] = 1
+            else:
+                sheet[f'{lecture_col_dict[lec_id]}{row_num}'] = 0
+    workbook.save(filename=save_path)
+    cur.execute('SELECT email FROM user_accounts WHERE token = %s',
+                (token, ))
+    email = cur.fetchone()[0]
+    cur.close()
+    conn.close()
+    send_attendance_sheet_email(email, course[0], save_path)
+    import os
+    os.remove(save_path)
+    return {'message' : f'Attendance sheet sent to {email}!'}

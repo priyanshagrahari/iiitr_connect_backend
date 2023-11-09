@@ -1,3 +1,6 @@
+from email.mime.application import MIMEApplication
+from email.mime.base import MIMEBase
+from posixpath import basename
 import smtplib, ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -75,3 +78,40 @@ def send_encoding_reminder_email( roll_num : str ):
         server.starttls(context=context)
         server.login(sender_email, password)
         server.sendmail(sender_email, f"{roll_num}@iiitr.ac.in", message.as_string())
+
+def send_attendance_sheet_email( email : str, course_name : str, path : str ):
+    message = MIMEMultipart("alternative")
+    message["Subject"] = f"Attendance Sheet for {course_name} | IIITR Connect"
+    message["From"] = sender_email
+    message["To"] = email
+
+    text = f"""\
+    Please find the requested attedance sheet for {course_name} attached.
+    Have a nice day :)"""
+    html = f"""\
+    <html>
+        <body>
+        <h3>IIITR Connect Attendance Sheet</h3>
+        <p>Please find the requested attedance sheet for {course_name} attached. <br>
+        <p>Have a nice day :)</p>
+        </body>
+    </html>
+    """
+    part1 = MIMEText(text, "plain")
+    part2 = MIMEText(html, "html")
+    message.attach(part1)
+    message.attach(part2)
+
+    with open(path, "rb") as fil:
+        part3 = MIMEApplication(
+            fil.read(),
+            Name=basename(path)
+        )
+    part3['Content-Disposition'] = 'attachment; filename="%s"' % basename(path)
+    message.attach(part3)
+
+    context = ssl.create_default_context()
+    with smtplib.SMTP(smtp_server, port) as server:
+        server.starttls(context=context)
+        server.login(sender_email, password)
+        server.sendmail(sender_email, email, message.as_string())

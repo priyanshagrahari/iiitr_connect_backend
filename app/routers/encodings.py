@@ -50,7 +50,7 @@ async def upload_image(
         face = cv2.imdecode(np.fromstring(file.file.read(), np.uint8), cv2.IMREAD_UNCHANGED)
         face_locations = face_recognition.face_locations(face)
         path = IMG_CACHE_LOCATION + f"/{datetime.utcnow().timestamp()}_{roll_num}.jpg"
-        print("will save to ", path)
+        # print("will save to ", path)
         cv2.imwrite(path, face)
         resp_dict = {}
         if len(face_locations) == 1:

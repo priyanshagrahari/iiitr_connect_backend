@@ -191,15 +191,40 @@ def get_reg_students(
         return resp_dict
     conn = connect()
     cur = conn.cursor()
-    response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-    cur.execute("SELECT registration_id, student_roll FROM course_registrations WHERE course_id = %s",
+    cur.execute("""
+                SELECT registration_id, s.roll_num, s.name
+                FROM course_registrations, students s
+                WHERE course_id = %s
+                AND s.roll_num = course_registrations.student_roll
+                ORDER BY s.roll_num
+                """,
                 (course_id, ))
     rows = cur.fetchall()
     resp_dict = {'registrations' : []}
     for row in rows:
         obj = {}
-        obj['student'] = _get_student_from_roll_num(row[1])
+        obj['student'] = {
+            'roll_num' : row[1],
+            'name' : row[2],
+        }
         obj['registration_id'] = row[0]
         resp_dict['registrations'].append(obj)
     response.status_code = status.HTTP_200_OK
     return resp_dict
+
+# returns ((registration_id, roll_num, name),)
+def _get_reg_students_from_course_id(course_id : str):
+    conn = connect()
+    cur = conn.cursor()
+    cur.execute("""
+                SELECT registration_id, s.roll_num, s.name
+                FROM course_registrations, students s
+                WHERE course_id = %s
+                AND s.roll_num = course_registrations.student_roll
+                ORDER BY s.roll_num
+                """,
+                (course_id, ))
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return rows

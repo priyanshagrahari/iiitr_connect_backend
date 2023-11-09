@@ -18,3 +18,7 @@ DB_PASSWORD         = os.environ.get("DB_PASSWORD")
 img_cache_path = Path("/tmp/cache/img")
 img_cache_path.mkdir(parents=True, exist_ok=True)
 IMG_CACHE_LOCATION  = str(img_cache_path)
+
+sheet_cache_path = Path("/tmp/cache/sheet")
+sheet_cache_path.mkdir(parents=True, exist_ok=True)
+SHEET_CACHE_LOCATION = str(sheet_cache_path)

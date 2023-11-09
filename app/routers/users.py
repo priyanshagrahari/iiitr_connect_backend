@@ -212,29 +212,30 @@ class loginObj(BaseModel):
 def genotp(data: loginObj, response: Response):
     conn = connect()
     cur = conn.cursor()
-    try:
-        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-        cur.execute("SELECT * FROM user_accounts WHERE email = %s",
-                    (data.email, ))
-        if len(cur.fetchall()) > 0:
-            random.seed(time())
-            otp = random.randint(1111, 9999)
-            cur.execute("UPDATE user_accounts SET otp = %s WHERE email = %s",
-                        (otp, data.email))
-            send_email_otp(otp, data.email)
-            conn.commit()
-            response.status_code = status.HTTP_200_OK
-            resp_dict = {"message" : f"OTP sent to {data.email}!"}
-        else:
-            response.status_code = status.HTTP_404_NOT_FOUND
-            resp_dict = {"message" : "Given email is not registered :("}
-    except:
-        response.status_code = status.HTTP_400_BAD_REQUEST
-        resp_dict = {"message" : "Bad request?"}
-    finally:
-        cur.close()
-        conn.close()
-        return resp_dict
+    # try:
+    email = data.email.strip()
+    cur.execute("SELECT * FROM user_accounts WHERE email = %s",
+                (email, ))
+    if len(cur.fetchall()) > 0:
+        random.seed(time())
+        otp = random.randint(1111, 9999)
+        cur.execute("UPDATE user_accounts SET otp = %s WHERE email = %s",
+                    (otp, email))
+        send_email_otp(otp, email)
+        conn.commit()
+        response.status_code = status.HTTP_200_OK
+        resp_dict = {"message" : f"OTP sent to {email}!"}
+    else:
+        response.status_code = status.HTTP_404_NOT_FOUND
+        resp_dict = {"message" : "Given email is not registered :("}
+    # except:
+    #     response.status_code = status.HTTP_400_BAD_REQUEST
+    #     resp_dict = {"message" : "Bad request?"}
+    print(email, data.otp)
+    # finally:
+    cur.close()
+    conn.close()
+    return resp_dict
 
 @router.post("/login")
 def login(data: loginObj, response: Response):
